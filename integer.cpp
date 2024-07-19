@@ -28,7 +28,7 @@ struct {
   int padding[64];
   std::uint64_t value = 0;
   int padding2[64];
-} std_mutex_integer;
+} std_shared_mutex_integer;
 
 struct {
   pthread_rwlock_t mutex = PTHREAD_RWLOCK_INITIALIZER;
@@ -44,26 +44,17 @@ struct {
 } atomic_integer;;
 
 struct {
+  std::mutex mutex;
+  int padding[64];
+  std::uint64_t value = 0;
+  int padding2[64];
+} std_mutex_integer;
+
+struct {
   int padding[64];
   std::uint64_t value = 0;
   int padding2[64];
 } integer;
-
-std::uint64_t atomic_op() noexcept {
-  std::random_device rd;
-  std::mt19937 rng{rd()};
-  volatile std::uint64_t v;
-
-  for (std::size_t i = 0; i < num_ops; ++i) {
-    if ((rng() % total_ops) < read_ops) {
-      v = atomic_integer.value.load(std::memory_order_relaxed);
-    } else {
-      v = atomic_integer.value.fetch_add(1, std::memory_order_relaxed);
-    }
-  }
-
-  return v;
-}
 
 std::uint64_t std_rwlock_op() noexcept {
   std::random_device rd;
@@ -72,11 +63,11 @@ std::uint64_t std_rwlock_op() noexcept {
 
   for (std::size_t i = 0; i < num_ops; ++i) {
     if ((rng() % total_ops) < read_ops) {
-      std::shared_lock lock{std_mutex_integer.mutex};
-      v = std_mutex_integer.value;
+      std::shared_lock lock{std_shared_mutex_integer.mutex};
+      v = std_shared_mutex_integer.value;
     } else {
-      std::unique_lock lock{std_mutex_integer.mutex};
-      v = std_mutex_integer.value += 1;
+      std::unique_lock lock{std_shared_mutex_integer.mutex};
+      v = std_shared_mutex_integer.value += 1;
     }
   }
 
@@ -91,12 +82,46 @@ std::uint64_t pthread_rwlock_op() noexcept {
   for (std::size_t i = 0; i < num_ops; ++i) {
     if ((rng() % total_ops) < read_ops) {
       pthread_rwlock_rdlock(&pthread_mutex_integer.mutex);
-      v = std_mutex_integer.value;
+      v = std_shared_mutex_integer.value;
       pthread_rwlock_unlock(&pthread_mutex_integer.mutex);
     } else {
       pthread_rwlock_wrlock(&pthread_mutex_integer.mutex);
-      v = std_mutex_integer.value += 1;
+      v = std_shared_mutex_integer.value += 1;
       pthread_rwlock_unlock(&pthread_mutex_integer.mutex);
+    }
+  }
+
+  return v;
+}
+
+std::uint64_t std_mutex_op() noexcept {
+  std::random_device rd;
+  std::mt19937 rng{rd()};
+  volatile std::uint64_t v;
+
+  for (std::size_t i = 0; i < num_ops; ++i) {
+    if ((rng() % total_ops) < read_ops) {
+      std::lock_guard lock{std_mutex_integer.mutex};
+      v = std_mutex_integer.value;
+    } else {
+      std::lock_guard lock{std_mutex_integer.mutex};
+      v = std_mutex_integer.value += 1;
+    }
+  }
+
+  return v;
+}
+
+std::uint64_t atomic_op() noexcept {
+  std::random_device rd;
+  std::mt19937 rng{rd()};
+  volatile std::uint64_t v;
+
+  for (std::size_t i = 0; i < num_ops; ++i) {
+    if ((rng() % total_ops) < read_ops) {
+      v = atomic_integer.value.load(std::memory_order_relaxed);
+    } else {
+      v = atomic_integer.value.fetch_add(1, std::memory_order_relaxed);
     }
   }
 
@@ -192,6 +217,11 @@ int main(int argc, char** argv) {
   std::this_thread::sleep_for(5s);
 
   run("pthread_rwlock", pthread_rwlock_op);
+
+  // some naive attempt at cooling down
+  std::this_thread::sleep_for(5s);
+
+  run("std::mutex", std_mutex_op);
 
   // some naive attempt at cooling down
   std::this_thread::sleep_for(5s);
