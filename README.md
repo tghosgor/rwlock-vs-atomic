@@ -2,7 +2,8 @@
 
 Benchmarking the performance of a rwlock against atomic naively.
 There're many obvious parameters that has a direct effect on the outcome,
-like turbo-boost, that we do not really pay attention to here.
+like turbo-boost, that we do not really pay attention to here. Still, I hope
+this can be a reference on deciding when to use atomics against lock or rwlock.
 
 ## integer
 
